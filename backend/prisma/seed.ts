@@ -3,12 +3,9 @@
 
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { mkdir, rm, writeFile } from 'fs/promises';
-import { join, resolve } from 'path';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 const prisma = new PrismaClient();
-
-const uploadDir = resolve(process.cwd(), 'uploads');
 
 async function main() {
   // Clear old data first so running this twice gives the same result.
@@ -17,10 +14,6 @@ async function main() {
   await prisma.job.deleteMany();
   await prisma.company.deleteMany();
   await prisma.user.deleteMany();
-
-  // Delete the uploaded files too. Without this the folder keeps filling up
-  // with resumes belonging to applications that no longer exist.
-  await rm(uploadDir, { recursive: true, force: true });
 
   // Every demo account uses this password.
   const password = await bcrypt.hash('password123', 10);
@@ -193,12 +186,10 @@ async function main() {
   });
 
   // --- One application already in progress ----------------------------------
-  // Write a small placeholder PDF so the employer's "View resume" button
+  // Upload a small placeholder PDF so the employer's "View resume" button
   // works on this seeded application instead of showing an error.
   const resumeKey = `resumes/${verified.id}/example-resume.pdf`;
-
-  await mkdir(join(uploadDir, 'resumes', verified.id), { recursive: true });
-  await writeFile(join(uploadDir, resumeKey), placeholderPdf('Ananya Sharma'));
+  await uploadPlaceholderResume(resumeKey, 'Ananya Sharma');
 
   await prisma.application.create({
     data: {
@@ -226,6 +217,30 @@ Done. Every account below uses the password: password123
 
   5 jobs, 1 application already shortlisted.
 `);
+}
+
+// Puts the placeholder PDF in the same bucket the app uses, so the seeded
+// application behaves exactly like a real one.
+async function uploadPlaceholderResume(key: string, name: string) {
+  const s3 = new S3Client({
+    region: process.env.S3_REGION,
+    credentials: {
+      accessKeyId: process.env.S3_KEY_ID as string,
+      secretAccessKey: process.env.S3_KEY_SECRET as string,
+    },
+    ...(process.env.S3_ENDPOINT
+      ? { endpoint: process.env.S3_ENDPOINT, forcePathStyle: true }
+      : {}),
+  });
+
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: process.env.S3_BUCKET,
+      Key: key,
+      Body: placeholderPdf(name),
+      ContentType: 'application/pdf',
+    }),
+  );
 }
 
 // The smallest PDF a browser will open, with one line of text on it.

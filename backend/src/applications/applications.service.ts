@@ -162,7 +162,7 @@ export class ApplicationsService {
     }
 
     return {
-      stream: this.storage.readResume(application.resumeKey),
+      stream: await this.storage.readResume(application.resumeKey),
       filename: application.resumeName,
     };
   }
