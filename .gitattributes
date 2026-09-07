@@ -1,0 +1,8 @@
+# Keep line endings consistent no matter which OS the repo is cloned on.
+* text=auto eol=lf
+
+# Binary files git should not try to convert.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
