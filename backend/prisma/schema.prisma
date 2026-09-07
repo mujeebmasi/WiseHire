@@ -1,0 +1,142 @@
+// WiseHire — a job board where a posting can require that applicants
+// have verified their identity before they are allowed to apply.
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// How much we have checked about a person.
+// A job says which level it needs, and we compare the two before
+// letting someone apply. See src/verification.ts.
+enum VerificationLevel {
+  NONE // just signed up
+  EMAIL // confirmed their email
+  GOVT_ID // Aadhaar / DigiLocker checked
+}
+
+enum UserRole {
+  CANDIDATE
+  EMPLOYER
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  INTERNSHIP
+  CONTRACT
+}
+
+enum WorkMode {
+  REMOTE
+  HYBRID
+  ONSITE
+}
+
+enum ApplicationStage {
+  APPLIED
+  SHORTLISTED
+  INTERVIEW
+  OFFER
+  HIRED
+  REJECTED
+}
+
+model User {
+  id       String @id @default(uuid())
+  email    String @unique
+  password String // bcrypt hash, never the real password
+  name     String
+
+  headline String?
+  location String?
+  skills   String[] @default([])
+
+  role         UserRole          @default(CANDIDATE)
+  verification VerificationLevel @default(NONE)
+  // Last 4 digits of the ID they verified with. We never store the full number.
+  govIdLast4   String?
+
+  company Company? // set only for employers
+  applications Application[]
+
+  createdAt DateTime @default(now())
+}
+
+model Company {
+  id   String @id @default(uuid())
+  name String
+
+  description String?
+  website     String?
+
+  // One employer owns one company. Keeps permission checks simple:
+  // "is this your company?" is a single comparison.
+  ownerId String @unique
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  jobs Job[]
+
+  createdAt DateTime @default(now())
+}
+
+model Job {
+  id        String  @id @default(uuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String
+  type        JobType
+  workMode    WorkMode @default(ONSITE)
+  location    String?
+  skills      String[] @default([])
+
+  // The whole point of this app: applicants below this level are refused.
+  minVerification VerificationLevel @default(GOVT_ID)
+
+  salaryMin Int?
+  salaryMax Int?
+
+  isOpen Boolean @default(true)
+
+  applications Application[]
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId])
+  @@index([isOpen])
+}
+
+model Application {
+  id     String @id @default(uuid())
+  jobId  String
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Where the CV lives in the S3 bucket, plus the name to show in the UI.
+  resumeKey  String
+  resumeName String
+  coverNote  String?
+
+  stage ApplicationStage @default(APPLIED)
+
+  // A note the employer writes back to the candidate. Only the employer can
+  // set it; the candidate sees it on their applications page.
+  employerMessage String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Stops the same person applying to the same job twice. Letting the
+  // database enforce it is safer than checking first in code, because two
+  // requests arriving at the same moment would both pass that check.
+  @@unique([jobId, userId])
+  @@index([jobId])
+  @@index([userId])
+}

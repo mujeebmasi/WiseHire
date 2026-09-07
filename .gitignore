@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.next/
+
+# Never commit these - they hold your database password and JWT secret.
+.env
+.env.local
+
+*.log
+
+# Editor and assistant settings
+.vscode/
+.idea/
+.claude/
+*.md.local
+AGENTS.md
+CLAUDE.md

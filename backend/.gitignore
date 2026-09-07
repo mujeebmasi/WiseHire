@@ -1,0 +1,6 @@
+
+# local env
+.env
+
+# Uploaded resumes - never commit these.
+uploads/
